@@ -77,3 +77,94 @@ def logout():
     session.pop('user_id', None)
     flash("You have been logged out.", "info")
     return redirect(url_for('login'))
+
+@app.route("/", methods=["GET", "POST"])
+def index():
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
+    
+    data = get_data()  # Load data on demand
+    user_item_matrix = data['user_item_matrix']
+    user_similarity = data['user_similarity']
+    item_similarity = data['item_similarity']
+    movies = data['movies']
+    
+    user_id = session['user_id']
+    error_message = None
+    rated_movies = []
+    recommendations = []
+    similar_users = []
+    selected_algorithm = "user"
+    
+    # Get the logged-in user's ratings
+    user_ratings = user_item_matrix.loc[user_id]
+    rated_movie_ids = user_ratings[user_ratings > 0].index.tolist()
+    for movie_id in rated_movie_ids:
+        try:
+            title = movies[movies["movieId"] == movie_id]["title"].values[0]
+            rating = round(user_ratings[movie_id], 2)
+            rated_movies.append((movie_id, title, rating))
+        except (IndexError, KeyError):
+            continue
+
+    if request.method == "POST":
+        try:
+            selected_algorithm = request.form["algorithm"]
+            unrated_movies = user_ratings[user_ratings == 0].index.tolist()
+            predictions = {}
+            for movie_id in unrated_movies:
+                if selected_algorithm == "user":
+                    pred_rating = predict_rating_user_based(user_id, movie_id, user_item_matrix, user_similarity, k=5)
+                else:
+                    pred_rating = predict_rating_item_based(user_id, movie_id, user_item_matrix, item_similarity, k=5)
+                predictions[movie_id] = pred_rating
+            top_movies = sorted(predictions.items(), key=lambda x: x[1], reverse=True)[:10]
+            for movie_id, rating in top_movies:
+                try:
+                    title = movies[movies["movieId"] == movie_id]["title"].values[0]
+                    recommendations.append((movie_id, title, round(rating, 2)))
+                except (IndexError, KeyError):
+                    continue
+            # Compute top 5 similar users (excluding current user)
+            sim_scores = user_similarity.loc[user_id].drop(user_id)
+            top_similar = sim_scores.sort_values(ascending=False).head(5)
+            for similar_user_id, score in top_similar.items():
+                similar_users.append((similar_user_id, round(score, 2)))
+        except Exception as e:
+            error_message = str(e)
+    
+    return render_template(
+        "index.html",
+        rated_movies=rated_movies,
+        recommendations=recommendations,
+        similar_users=similar_users,
+        error_message=error_message,
+        selected_algorithm=selected_algorithm
+    )
+def evaluate_algorithms():
+    data = get_data()
+    ratings = data['ratings']
+    train_data = ratings.sample(frac=0.8, random_state=42)
+    test_data = ratings.drop(train_data.index)
+    train_matrix = create_user_item_matrix(train_data)
+    train_user_sim = compute_user_similarity(train_matrix)
+    train_item_sim = compute_item_similarity(train_matrix)
+    
+    user_based_predictions = []
+    item_based_predictions = []
+    actual_ratings = []
+    
+    for _, row in test_data.iterrows():
+        user_id_val, movie_id, rating = row['userId'], row['movieId'], row['rating']
+        try:
+            user_pred = predict_rating_user_based(user_id_val, movie_id, train_matrix, train_user_sim, k=5)
+            item_pred = predict_rating_item_based(user_id_val, movie_id, train_matrix, train_item_sim, k=5)
+            user_based_predictions.append(user_pred)
+            item_based_predictions.append(item_pred)
+            actual_ratings.append(rating)
+        except:
+            continue
+    
+    user_based_rmse = evaluate_predictions(actual_ratings, user_based_predictions)
+    item_based_rmse = evaluate_predictions(actual_ratings, item_based_predictions)
+    return user_based_rmse, item_based_rmse
