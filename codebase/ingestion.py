@@ -43,7 +43,7 @@ links_collection = db["links"]
 
 
 # Dataset directory
-DATASET_DIR = Path(__file__).resolve().parent.joinpath("..", "dataset", "ml-latest-small")
+DATASET_DIR = Path(__file__).resolve().parent.joinpath("..", "dataset")
 
 
 def load_csv_to_collection(
