@@ -51,6 +51,25 @@ def load_movies_from_db():
         movies['movieId'] = movies['movieId'].astype(int)
     return movies
 
+
+# Serve the static frontend (GitHub Pages content) from the docs/ folder
+# This exposes the static site under the `/site` path so the app and static
+# frontend can live on the same domain without route conflicts.
+from flask import send_from_directory
+
+PROJECT_ROOT = os.path.dirname(BASE_DIR)
+DOCS_DIR = os.path.join(PROJECT_ROOT, "docs")
+
+
+@app.route('/site/')
+def serve_site_index():
+    return send_from_directory(DOCS_DIR, 'index.html')
+
+
+@app.route('/site/<path:filename>')
+def serve_site_file(filename: str):
+    return send_from_directory(DOCS_DIR, filename)
+
 def get_data():
     if not hasattr(app, 'data'):
         print("Loading ratings from database...")
