@@ -5,15 +5,35 @@ from pymongo import MongoClient
 import sys
 import secrets
 
-from rec_algos import (
-    load_ratings_from_db,
-    create_user_item_matrix,
-    compute_user_similarity,
-    compute_item_similarity,
-    predict_rating_user_based,
-    predict_rating_item_based,
-    evaluate_predictions,
-)
+import importlib
+
+# Import `rec_algos` module in a way that works when running
+# as a package (e.g. `gunicorn codebase.app:app`) and when running
+# the file directly (python codebase/app.py).
+_pkg = __package__
+rec_mod = None
+try:
+    # preferred: import as a submodule of the current package
+    if _pkg:
+        rec_mod = importlib.import_module(f"{_pkg}.rec_algos")
+    else:
+        # not running as package; try top-level import
+        rec_mod = importlib.import_module("rec_algos")
+except Exception:
+    # fallback: try explicit package name `codebase.rec_algos`
+    try:
+        rec_mod = importlib.import_module("codebase.rec_algos")
+    except Exception as e:  # re-raise a clearer error
+        raise ImportError("Could not import rec_algos module") from e
+
+# Bind required symbols from the module
+load_ratings_from_db = rec_mod.load_ratings_from_db
+create_user_item_matrix = rec_mod.create_user_item_matrix
+compute_user_similarity = rec_mod.compute_user_similarity
+compute_item_similarity = rec_mod.compute_item_similarity
+predict_rating_user_based = rec_mod.predict_rating_user_based
+predict_rating_item_based = rec_mod.predict_rating_item_based
+evaluate_predictions = rec_mod.evaluate_predictions
 
 import os
 from dotenv import load_dotenv
